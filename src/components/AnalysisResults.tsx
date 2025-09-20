@@ -13,13 +13,15 @@ import {
   AlertCircle,
   Download,
   Filter,
-  Search
+  Search,
+  FileText
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface AnalysisData {
   id: string;
   candidateName: string;
+  fileName: string;
   score: number;
   verdict: "High" | "Medium" | "Low";
   analysisTime: string;
@@ -191,9 +193,15 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
                   </div>
                   <div>
                     <CardTitle className="text-lg">{result.candidateName}</CardTitle>
-                    <CardDescription className="flex items-center space-x-2">
-                      <Clock className="h-3 w-3" />
-                      <span>Analyzed: {formatDate(result.analysisTime)}</span>
+                    <CardDescription className="space-y-1">
+                      <div className="flex items-center space-x-2">
+                        <Clock className="h-3 w-3" />
+                        <span>Analyzed: {formatDate(result.analysisTime)}</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <FileText className="h-3 w-3" />
+                        <span className="font-mono text-xs">{result.fileName}</span>
+                      </div>
                     </CardDescription>
                   </div>
                 </div>

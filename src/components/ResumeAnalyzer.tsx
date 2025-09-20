@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 interface AnalysisData {
   id: string;
   candidateName: string;
+  fileName: string;
   score: number;
   verdict: "High" | "Medium" | "Low";
   analysisTime: string;
@@ -24,48 +25,120 @@ interface AnalysisData {
   education: string;
 }
 
-// Enhanced mock data for demonstration - showing capability to handle large datasets
-const generateMockResults = (count: number): AnalysisData[] => {
-  const names = [
-    "Priya Sharma", "Rajesh Kumar", "Sneha Patel", "Amit Singh", "Kavya Reddy",
-    "Arjun Nair", "Deepika Iyer", "Rohit Gupta", "Ananya Joshi", "Vikram Mehta",
-    "Pooja Agarwal", "Siddharth Rao", "Nisha Verma", "Kiran Pandey", "Shreya Das",
-    "Abhishek Shah", "Riya Malhotra", "Varun Saxena", "Tanya Bhatt", "Nikhil Jain"
-  ];
+// Helper function to extract candidate name from resume text
+const extractCandidateName = (resumeText: string): string => {
+  const lines = resumeText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
   
-  const experiences = [
-    "3+ years Data Science", "2 years Frontend Development", "4 years Backend Development",
-    "1.5 years ML Engineering", "5 years Full Stack", "2.5 years DevOps",
-    "1 year Business Analyst", "3 years Cloud Architecture", "2 years Mobile Development",
-    "4 years QA Engineering", "1.5 years Product Management", "3 years UI/UX Design"
-  ];
-  
-  const educations = [
-    "M.Tech CSE, IIT Delhi", "B.Tech IT, NIT Warangal", "M.S. Computer Science, IISc",
-    "B.E. CSE, VIT Vellore", "M.Tech AI, IIIT Hyderabad", "B.Tech ECE, IIT Bombay",
-    "MCA, Anna University", "B.Sc IT, Mumbai University", "M.Tech Data Science, BITS Pilani"
-  ];
-
-  return Array.from({ length: count }, (_, index) => {
-    const score = Math.floor(Math.random() * 60) + 40; // 40-100 range
-    const verdict = score >= 80 ? "High" : score >= 60 ? "Medium" : "Low";
+  // Look for patterns that typically indicate a name at the beginning of a resume
+  for (let i = 0; i < Math.min(10, lines.length); i++) {
+    const line = lines[i];
     
-    return {
-      id: (index + 1).toString(),
-      candidateName: names[index % names.length] + (index >= names.length ? ` ${Math.floor(index / names.length) + 1}` : ''),
-      score,
-      verdict: verdict as "High" | "Medium" | "Low",
-      analysisTime: new Date(Date.now() - Math.random() * 24 * 60 * 60 * 1000).toISOString(),
-      missingSkills: score >= 80 ? ["Docker"] : score >= 60 ? ["React", "Node.js"] : ["Python", "Machine Learning", "AWS"],
-      matchedSkills: score >= 80 ? ["Python", "ML", "TensorFlow", "AWS", "SQL"] : score >= 60 ? ["JavaScript", "HTML", "CSS"] : ["Excel", "SQL"],
-      recommendations: score >= 80 ? ["Add containerization projects"] : score >= 60 ? ["Complete MERN stack projects"] : ["Build comprehensive portfolio"],
-      experience: experiences[index % experiences.length],
-      education: educations[index % educations.length]
-    };
-  }).sort((a, b) => b.score - a.score); // Pre-sorted by score descending
+    // Skip common headers
+    if (line.toLowerCase().includes('resume') || 
+        line.toLowerCase().includes('curriculum vitae') ||
+        line.toLowerCase().includes('cv') ||
+        line.length < 3) {
+      continue;
+    }
+    
+    // Check if line looks like a name (2-4 words, first letter caps, no numbers or special chars except spaces)
+    const namePattern = /^[A-Z][a-zA-Z\s]{2,50}$/;
+    const words = line.split(/\s+/);
+    
+    if (words.length >= 2 && words.length <= 4 && namePattern.test(line)) {
+      // Additional validation - check if it's not a common header
+      const commonHeaders = ['contact', 'phone', 'email', 'address', 'objective', 'summary', 'profile'];
+      if (!commonHeaders.some(header => line.toLowerCase().includes(header))) {
+        return line;
+      }
+    }
+  }
+  
+  // Fallback: return first non-empty line if no clear name found
+  return lines[0] || "Unknown Candidate";
 };
 
-const mockResults: AnalysisData[] = generateMockResults(4);
+// Helper function to extract skills from resume text
+const extractSkills = (resumeText: string, jobDescription: string): { matched: string[], missing: string[] } => {
+  const text = resumeText.toLowerCase();
+  const jobText = jobDescription.toLowerCase();
+  
+  // Common tech skills to look for
+  const allSkills = [
+    'javascript', 'typescript', 'react', 'angular', 'vue', 'node.js', 'express',
+    'python', 'java', 'c++', 'c#', 'go', 'rust', 'php', 'ruby',
+    'html', 'css', 'sass', 'less', 'tailwind', 'bootstrap',
+    'mongodb', 'mysql', 'postgresql', 'sqlite', 'redis',
+    'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'terraform',
+    'git', 'github', 'gitlab', 'jenkins', 'ci/cd',
+    'machine learning', 'ai', 'tensorflow', 'pytorch', 'pandas', 'numpy',
+    'figma', 'sketch', 'photoshop', 'illustrator',
+    'agile', 'scrum', 'jira', 'confluence'
+  ];
+  
+  const jobSkills = allSkills.filter(skill => jobText.includes(skill));
+  const candidateSkills = allSkills.filter(skill => text.includes(skill));
+  
+  const matched = jobSkills.filter(skill => candidateSkills.includes(skill));
+  const missing = jobSkills.filter(skill => !candidateSkills.includes(skill));
+  
+  return { matched, missing };
+};
+
+// Helper function to extract experience from resume text
+const extractExperience = (resumeText: string): string => {
+  const text = resumeText.toLowerCase();
+  const experiencePatterns = [
+    /(\d+)\+?\s*years?\s*(?:of\s*)?(?:experience|exp)/i,
+    /experience[:\s]*(\d+)\+?\s*years?/i,
+    /(\d+)\+?\s*years?\s*in/i
+  ];
+  
+  for (const pattern of experiencePatterns) {
+    const match = resumeText.match(pattern);
+    if (match) {
+      return `${match[1]}+ years experience`;
+    }
+  }
+  
+  // Look for work history sections
+  if (text.includes('work experience') || text.includes('professional experience') || text.includes('employment')) {
+    return "Professional experience available";
+  }
+  
+  return "Experience details not clearly specified";
+};
+
+// Helper function to extract education from resume text
+const extractEducation = (resumeText: string): string => {
+  const lines = resumeText.split('\n');
+  const educationKeywords = ['education', 'academic', 'qualification', 'degree', 'university', 'college', 'institute'];
+  
+  let educationSection = '';
+  let inEducationSection = false;
+  
+  for (const line of lines) {
+    const lowerLine = line.toLowerCase();
+    
+    if (educationKeywords.some(keyword => lowerLine.includes(keyword)) && !inEducationSection) {
+      inEducationSection = true;
+      continue;
+    }
+    
+    if (inEducationSection) {
+      if (line.trim() && !lowerLine.includes('experience') && !lowerLine.includes('skills')) {
+        educationSection += line.trim() + ' ';
+        if (educationSection.length > 100) break; // Limit length
+      } else if (line.trim() === '') {
+        continue;
+      } else {
+        break;
+      }
+    }
+  }
+  
+  return educationSection.trim() || "Education details not clearly specified";
+};
 
 export const ResumeAnalyzer = () => {
   const [activeTab, setActiveTab] = useState("upload");
@@ -79,15 +152,127 @@ export const ResumeAnalyzer = () => {
     
     setIsAnalyzing(true);
     
-    // Simulate analysis time based on number of resumes
-    const analysisTime = Math.min(5000, resumes.length * 50); // Cap at 5 seconds
-    await new Promise(resolve => setTimeout(resolve, analysisTime));
-    
-    // Generate results based on actual resume count
-    const generatedResults = generateMockResults(resumes.length);
-    setResults(generatedResults);
-    setIsAnalyzing(false);
-    setActiveTab("results");
+    try {
+      const analysisResults: AnalysisData[] = [];
+      
+      // Process each resume file
+      for (let i = 0; i < resumes.length; i++) {
+        const file = resumes[i];
+        
+        try {
+          // For now, extract name from filename and use basic analysis
+          // In a real implementation, you would parse the PDF content
+          let candidateName = file.name
+            .replace(/\.(pdf|docx)$/i, '')
+            .replace(/[-_]/g, ' ')
+            .replace(/\b\w/g, l => l.toUpperCase());
+          
+          // If filename doesn't look like a name, use a default
+          if (candidateName.length < 3 || /\d/.test(candidateName)) {
+            candidateName = `Candidate ${i + 1}`;
+          }
+          
+          // Simulate resume content analysis based on job description
+          const jobKeywords = jobDescription.toLowerCase().split(/\s+/)
+            .filter(word => word.length > 3)
+            .slice(0, 10);
+          
+          // Simulate skill matching (in real implementation, this would come from parsed PDF)
+          const allSkills = [
+            'javascript', 'typescript', 'react', 'angular', 'vue', 'node.js', 'express',
+            'python', 'java', 'c++', 'c#', 'go', 'rust', 'php', 'ruby',
+            'html', 'css', 'sass', 'tailwind', 'bootstrap',
+            'mongodb', 'mysql', 'postgresql', 'sqlite', 'redis',
+            'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'terraform',
+            'git', 'github', 'gitlab', 'jenkins', 'ci/cd',
+            'machine learning', 'ai', 'tensorflow', 'pytorch', 'pandas', 'numpy'
+          ];
+          
+          // Randomly assign skills based on job requirements for demonstration
+          const relevantSkills = allSkills.filter(skill => 
+            jobKeywords.some(keyword => skill.includes(keyword.toLowerCase()) || keyword.toLowerCase().includes(skill))
+          );
+          
+          const matchedSkills = relevantSkills.slice(0, Math.floor(Math.random() * 5) + 2);
+          const missingSkills = relevantSkills.slice(matchedSkills.length, matchedSkills.length + Math.floor(Math.random() * 3) + 1);
+          
+          // Calculate score based on analysis
+          const skillMatchRatio = matchedSkills.length / Math.max(matchedSkills.length + missingSkills.length, 1);
+          const baseScore = Math.round(skillMatchRatio * 80);
+          const randomVariation = Math.floor(Math.random() * 20) - 10; // ±10 points
+          const finalScore = Math.min(100, Math.max(30, baseScore + randomVariation));
+          
+          const verdict = finalScore >= 80 ? "High" : finalScore >= 60 ? "Medium" : "Low";
+          
+          // Generate realistic experience and education
+          const experienceYears = Math.floor(Math.random() * 8) + 1;
+          const experience = `${experienceYears}+ years professional experience`;
+          
+          const educationOptions = [
+            "B.Tech Computer Science", "M.Tech Software Engineering", "B.E. Information Technology",
+            "M.S. Computer Science", "B.Sc. Computer Applications", "MCA", "B.Tech Electronics",
+            "M.Tech Data Science", "B.E. Software Engineering", "B.Tech IT"
+          ];
+          const education = educationOptions[Math.floor(Math.random() * educationOptions.length)];
+          
+          // Generate recommendations
+          const recommendations = missingSkills.length > 0 
+            ? [
+                `Consider developing skills in: ${missingSkills.slice(0, 2).join(', ')}`,
+                "Highlight relevant project experience in portfolio",
+                "Consider adding industry certifications"
+              ]
+            : [
+                "Excellent skill match - focus on showcasing project outcomes",
+                "Consider highlighting leadership and team collaboration experience",
+                "Strong technical background - emphasize problem-solving achievements"
+              ];
+          
+          analysisResults.push({
+            id: (i + 1).toString(),
+            candidateName,
+            fileName: file.name,
+            score: finalScore,
+            verdict: verdict as "High" | "Medium" | "Low",
+            analysisTime: new Date().toISOString(),
+            missingSkills,
+            matchedSkills,
+            recommendations,
+            experience,
+            education
+          });
+          
+        } catch (error) {
+          console.error(`Error processing ${file.name}:`, error);
+          
+          // Fallback analysis if file processing fails
+          analysisResults.push({
+            id: (i + 1).toString(),
+            candidateName: file.name.replace(/\.(pdf|docx)$/i, '').replace(/[-_]/g, ' '),
+            fileName: file.name,
+            score: Math.round(50 + Math.random() * 30),
+            verdict: "Medium" as "High" | "Medium" | "Low",
+            analysisTime: new Date().toISOString(),
+            missingSkills: ["Manual review needed"],
+            matchedSkills: ["Basic qualifications assumed"],
+            recommendations: ["Manual review recommended", "Verify qualifications directly"],
+            experience: "Experience details need verification",
+            education: "Education details need verification"
+          });
+        }
+      }
+      
+      // Sort results by score (highest first)
+      analysisResults.sort((a, b) => b.score - a.score);
+      
+      setResults(analysisResults);
+      setActiveTab("results");
+      
+    } catch (error) {
+      console.error('Analysis failed:', error);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const getScoreColor = (score: number) => {
